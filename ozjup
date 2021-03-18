@@ -1,4 +1,4 @@
-!env bash
+#!env bash
 
 ## When run on your local machine, this script starts
 ## a singularity container on ozstar running jupyter, creates an 
