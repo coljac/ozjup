@@ -64,7 +64,6 @@ killjob() {
         if [[ "$(hostname)" != "$jobhost" ]]; then
             ssh $jobhost "bash ozjup -k"
         else
-            echo killing singularity here
             running=isrunning
             if [[ "0" != running ]]; then
                 singularity instance stop ozjup
@@ -118,11 +117,10 @@ sshtunnel() {
 
     echo "Starting SSH tunnel to $NODENAME..."
     set -m
-    ssh -o "StrictHostKeyChecking no" -N -L  $PORT:localhost:$PORT -J ${ozu} ${USERNAME}@${NODENAME} &
-    sleep 1
     echo "Now connect to http://localhost:$PORT"
+    ssh -o "StrictHostKeyChecking no" -N -L  $PORT:localhost:$PORT -J ${ozu} ${USERNAME}@${NODENAME} 
     # echo $OPENCMD http://localhost:${PORT}/ &
-    fg
+    # fg
 }
 
 checksif() {
