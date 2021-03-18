@@ -4,7 +4,6 @@
 ## a singularity container on ozstar running jupyter, creates an 
 ## ssh tunnel, and starts a browser to a jupyter notebook.
 
-
 OTHER_ARGUMENTS=()
 oz=ozstar.swin.edu.au
 
@@ -96,16 +95,7 @@ isrunningold() {
 runjup() {
     checksif
     workdir=$1
-    # echo singularity exec --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$workdir":/work $HOME/singularity/tensorflow2-gpu-py3-r-jupyter_latest.sif jupyter notebook --no-browser --notebook-dir=/work
-    # singularity instance start -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$workdir":/work $HOME/singularity/tensorflow2-gpu-py3-r-jupyter_latest.sif ozjup
     singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$workdir":/work $HOME/singularity/ozjup.sif ozjup
-    # singularity exec --nv instance://ozjup jupyter notebook --no-browser --notebook-dir=/work --port $PORT
-    # sleep 4
-    # jobs
-    # sleep 40
-    # echo now disowning
-    # disown 1
-    # sleep 20
     echo $(hostname) > $STATUS_FILE
     cat $STATUS_FILE
 }
@@ -127,10 +117,6 @@ sshtunnel() {
     NODENAME=$1
 
     echo "Starting SSH tunnel to $NODENAME..."
-    # if [[ "$NODENAME" == "farnarkle"* ]]; then
-        # ssh -N -L  $PORT:localhost:9909 
-    # else
-    # echo ssh -N -L  $PORT:localhost:$PORT -J ${ozu} ${USERNAME}@${NODENAME} &
     set -m
     ssh -o "StrictHostKeyChecking no" -N -L  $PORT:localhost:$PORT -J ${ozu} ${USERNAME}@${NODENAME} &
     sleep 1
@@ -249,7 +235,8 @@ do
         ;;
     esac
 done
-echo "Running script with these args:" $allargs
+# echo "Running script with these args:" $allargs
+
 # Where are we?
 if [[ -n "$USERNAME" ]]; then
     USERNAME="$USERNAME"@
@@ -267,7 +254,7 @@ then
     fi
 fi
 
-echo Running on $(hostname) as user $USERNAME Node=$RUN_ON_NODE env=$environment workdir=${WORK_DIR}
+# echo Running on $(hostname) as user $USERNAME Node=$RUN_ON_NODE env=$environment workdir=${WORK_DIR}
 
 if [ "$environment" = "home" ]
 then
@@ -331,8 +318,3 @@ then
         # reportback
     fi
 fi
-
-# if [ "$environment" = "node" ]
-# then
-    # runjup 
-# fi
