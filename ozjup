@@ -32,7 +32,7 @@ printhelp() {
 
 Where <command> is one of:
 start: Start notebook and connect.
-check: Check if running and if so where
+status: Check if running and if so where
 kill: Stop running instance
 token: Run jupyter notebook list to view the connection token
 help: Print this help and exit
@@ -211,15 +211,20 @@ do
         exit
         shift
         ;;
-        -s|start)
+        start)
         START_JOB=1
         shift
         ;;
-        -k|kill)
+        kill)
         KILL_JOB=1
         shift
         ;;
-        -c|check)
+        status)
+        CHECK_JOB=1
+        shift
+        ;;
+        check)
+        echo "Deprecated: Use ozjup status instead."
         CHECK_JOB=1
         shift
         ;;
