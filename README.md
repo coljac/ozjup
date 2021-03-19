@@ -22,7 +22,7 @@ Quickstart:
 
 ```
 ozjup start
-ozjup check
+ozjup status
 ozjup token
 ozjup kill
 ```
