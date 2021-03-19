@@ -7,6 +7,8 @@
 OTHER_ARGUMENTS=()
 oz=ozstar.swin.edu.au
 
+SCRIPTPATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"/ozjup
+
 STATUS_FILE=$HOME/.jup_status
 JOB_FILE=$HOME/.jup_jobid
 # SIF_FILE=$HOME/singularity/tensorflow2-gpu-py3-r-jupyter_latest.sif
@@ -24,21 +26,25 @@ GPU=yes
 
 printhelp() {
     echo "Usage: Run on local machine; default action is to start jupyter container on a head node. 
-    ./ozjup [-u username] [-n|-k|-c] [-m memory] [-h hours]
+    ./ozjup [-u username] [-n] [-m memory] [-h hours] command
 
--u, --user: OzSTAR username (required; can be set with OZSTAR_USERNAME environemnt variable.)
--c, --check: Check if running and if so where
--k, --kill: Stop running instance
+Where <command> is one of:
+start: Start notebook and connect.
+check: Check if running and if so where
+kill: Stop running instance
+
+With optional flags:
+-u, --user: OzSTAR username (If left out, will work it out automatically, can be set with OZSTAR_USERNAME environment variable.)
 -n, --node: Run on a dedicated node using a slurm job
 -m, --memory: Memory required in GB (with -n only)
 -h, --hours: Hours in walltime to request (with -n only)
 -ng, --no-gpu: Don't ask for a GPU (with -n only)
 
 ## Examples
-./ozjup -u username  # run jupyter on head node and start SSH tunnel.
-./ozjup -u username -n -m 10 -h 2 # run jupyter on job node with 10G for 2 hours, wait for job to start, then start SSH tunnel.
-./ozjup -u username -c # check if it's running
-./ozjup -u username -k # kill container if running
+./ozjup -u username start # run jupyter on head node and start SSH tunnel.
+./ozjup -u username -n -m 10 -h 2 start # run jupyter on job node with 10G for 2 hours, wait for job to start, then start SSH tunnel.
+./ozjup -u username check # check if it's running
+./ozjup -u username kill # kill container if running
 "
 }
 
@@ -116,7 +122,7 @@ sshtunnel() {
     NODENAME=$1
 
     echo "Starting SSH tunnel to $NODENAME..."
-    set -m
+    # set -m
     echo "Now connect to http://localhost:$PORT"
     ssh -o "StrictHostKeyChecking no" -N -L  $PORT:localhost:$PORT -J ${ozu} ${USERNAME}@${NODENAME} 
     # echo $OPENCMD http://localhost:${PORT}/ &
@@ -187,11 +193,15 @@ do
         exit
         shift
         ;;
-        -k|--kill)
+        -s|start)
+        START_JOB=1
+        shift
+        ;;
+        -k|kill)
         KILL_JOB=1
         shift
         ;;
-        -c|--check)
+        -c|check)
         CHECK_JOB=1
         shift
         ;;
@@ -235,10 +245,20 @@ do
 done
 # echo "Running script with these args:" $allargs
 
-# Where are we?
+if [[ -z "${START_JOB}${KILL_JOB}${CHECK_JOB}" ]]; then
+    printhelp
+    exit
+fi
+
+if [[ -z "$USERNAME" ]]; then
+    USERNAME=$(ssh $oz 'echo $USER')
+fi
+
 if [[ -n "$USERNAME" ]]; then
     USERNAME="$USERNAME"@
 fi
+
+
 environment=home
 ozu=${USERNAME}$oz
 
@@ -265,7 +285,8 @@ then
         fi
         exit
     fi
-    scp -q $(realpath $0) ${ozu}:.
+    # scp -q $(realpath $0) ${ozu}:.
+    scp -q $SCRIPTPATH ${ozu}:.
     ssh ${ozu} -t "exec bash -l ozjup $allargs"
     if [[ -n "$KILL_JOB" ]]; then
         exit
