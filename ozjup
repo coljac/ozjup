@@ -10,6 +10,7 @@ oz=ozstar.swin.edu.au
 SCRIPTPATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"/ozjup
 
 STATUS_FILE=$HOME/.jup_status
+TOKEN_FILE=$HOME/.jup_token
 JOB_FILE=$HOME/.jup_jobid
 # SIF_FILE=$HOME/singularity/tensorflow2-gpu-py3-r-jupyter_latest.sif
 SIF_FILE=$HOME/singularity/ozjup.sif
@@ -23,6 +24,7 @@ PORT=9999
 MEM=10
 HOURS=4
 GPU=yes
+TOKEN_CHECK=
 
 printhelp() {
     echo "Usage: Run on local machine; default action is to start jupyter container on a head node. 
@@ -32,6 +34,8 @@ Where <command> is one of:
 start: Start notebook and connect.
 check: Check if running and if so where
 kill: Stop running instance
+token: Run jupyter notebook list to view the connection token
+help: Print this help and exit
 
 With optional flags:
 -u, --user: OzSTAR username (If left out, will work it out automatically, can be set with OZSTAR_USERNAME environment variable.)
@@ -43,8 +47,8 @@ With optional flags:
 ## Examples
 ./ozjup -u username start # run jupyter on head node and start SSH tunnel.
 ./ozjup -u username -n -m 10 -h 2 start # run jupyter on job node with 10G for 2 hours, wait for job to start, then start SSH tunnel.
-./ozjup -u username check # check if it's running
-./ozjup -u username kill # kill container if running
+./ozjup check # check if it's running
+./ozjup kill # kill container if running
 "
 }
 
@@ -54,21 +58,23 @@ waitjob() {
         sleep 1
     done
     echo "Job started - firing up notebook now."
+    sleep 5
 }
 
 killjob() {
     if [[ ! -e "$STATUS_FILE" ]]; then
         echo Nothing to kill.
-    elif [[ -e $JOB_FILE ]]; then
-        jobid=$(cat $JOB_FILE)
-        scancel $jobid
-        echo "Job $jobid Killed."
-        rm $JOB_FILE
-        rm $STATUS_FILE
+    # elif [[ -e $JOB_FILE ]]; then
+        # jobid=$(cat $JOB_FILE)
+        # scancel $jobid
+        # echo "Job $jobid Killed."
+        # rm $JOB_FILE
+        # rm $STATUS_FILE
     else
         jobhost=$(cat $STATUS_FILE)
         if [[ "$(hostname)" != "$jobhost" ]]; then
-            ssh $jobhost "bash ozjup -k"
+            # ssh $jobhost "bash ozjup -k"
+            ssh ${jobhost} -q -t "exec bash -l ozjup -k"
         else
             running=isrunning
             if [[ "0" != running ]]; then
@@ -102,7 +108,6 @@ runjup() {
     workdir=$1
     singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$workdir":/work $HOME/singularity/ozjup.sif ozjup
     echo $(hostname) > $STATUS_FILE
-    cat $STATUS_FILE
 }
 
 checkstatus() {
@@ -118,12 +123,26 @@ checkstatus() {
     fi
 }
 
+gettoken() {
+    tokcommand="singularity exec instance://ozjup jupyter notebook list"
+    jobhost=$(cat $STATUS_FILE)
+    if [[ "$(hostname)" != "$jobhost" ]]; then
+        result=$(ssh ${jobhost} -q -t "exec bash -l ozjup token")
+    else
+        result=$(singularity exec instance://ozjup jupyter notebook list|grep localhost)
+    fi
+    echo $result
+}
+
+
 sshtunnel() {
     NODENAME=$1
 
     echo "Starting SSH tunnel to $NODENAME..."
     # set -m
-    echo "Now connect to http://localhost:$PORT"
+    # echo "Now connect to http://localhost:$PORT"
+    token=$(ssh ${ozu} "exec bash -l ozjup token")
+    echo $token
     ssh -o "StrictHostKeyChecking no" -N -L  $PORT:localhost:$PORT -J ${ozu} ${USERNAME}@${NODENAME} 
     # echo $OPENCMD http://localhost:${PORT}/ &
     # fg
@@ -141,8 +160,8 @@ checksif() {
             wget --quiet $SIF_URL
         fi
         # singularity pull $IMAGENAME
-    else
-        echo "Image present."
+    # else
+        # echo "Image present."
     fi
 }
 
@@ -168,6 +187,7 @@ echo $(hostname) > '"$STATUS_FILE
 
 singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$WORK_DIR":/work $HOME/singularity/ozjup.sif ozjup
 
+
 jobup=1"'
 while [[ "1" == "$jobup" ]]; do
     sleep 10
@@ -178,17 +198,15 @@ while [[ "1" == "$jobup" ]]; do
 done
 
 ' > $HOME/runjup.sh 
-    sleep 30
     jobid=$(sbatch $HOME/runjup.sh|awk '{print $4'})
     echo $jobid > $JOB_FILE
 }
-
 
 allargs=$@
 for arg in "$@"
 do
     case $arg in
-        -h|--help)
+        help)
         printhelp
         exit
         shift
@@ -208,6 +226,10 @@ do
         -n|--node)
         RUN_ON_NODE=1
         shift 
+        ;;
+        token)
+        TOKEN_CHECK=1
+        shift
         ;;
         -ng|--no-gpu)
         GPU=
@@ -245,22 +267,11 @@ do
 done
 # echo "Running script with these args:" $allargs
 
-if [[ -z "${START_JOB}${KILL_JOB}${CHECK_JOB}" ]]; then
-    printhelp
-    exit
-fi
 
-if [[ -z "$USERNAME" ]]; then
-    USERNAME=$(ssh $oz 'echo $USER')
-fi
 
-if [[ -n "$USERNAME" ]]; then
-    USERNAME="$USERNAME"@
-fi
 
 
 environment=home
-ozu=${USERNAME}$oz
 
 if [ "1" -eq $(grep -i centos /etc/redhat-release 2>/dev/null |wc -l) ]
 then
@@ -270,12 +281,28 @@ then
     else
         environment=node
     fi
+    USERNAME=$USER
+else
+    if [[ -z "$USERNAME" ]]; then
+        USERNAME=$(ssh $oz 'echo $USER')
+    fi
+
+    if [[ -n "$USERNAME" ]]; then
+        USERNAME="$USERNAME"@
+    fi
 fi
 
+ozu=${USERNAME}$oz
 # echo Running on $(hostname) as user $USERNAME Node=$RUN_ON_NODE env=$environment workdir=${WORK_DIR}
 
 if [ "$environment" = "home" ]
 then
+    if [[ -z "${TOKEN_CHECK}${START_JOB}${KILL_JOB}${CHECK_JOB}" ]]; then
+        printhelp
+        exit
+    fi
+    # scp -q $(realpath $0) ${ozu}:.
+    scp -q $SCRIPTPATH ${ozu}:.
     if [[ -n "$CHECK_JOB" ]]; then
         status=$(checkstatus)
         if [[ -n "$status" ]]; then
@@ -285,12 +312,14 @@ then
         fi
         exit
     fi
-    # scp -q $(realpath $0) ${ozu}:.
-    scp -q $SCRIPTPATH ${ozu}:.
-    ssh ${ozu} -t "exec bash -l ozjup $allargs"
-    if [[ -n "$KILL_JOB" ]]; then
+
+    # Re-execute the script, but on ozstar.
+    ssh ${ozu} -q -t "exec bash -l ozjup $allargs"
+
+    if [[ -n "$KILL_JOB$TOKEN_CHECK" ]]; then
         exit
     fi
+
     sleep 2
     status=$(checkstatus)
     if [[ -n "$status" ]];
@@ -315,12 +344,15 @@ then
         checkstatus
         exit
     fi
-
-    if [[ -n "$CHECK_JOB" ]]; 
+    if [[ -n "$TOKEN_CHECK" ]]; 
     then
-        checkjob 
+        gettoken 
         exit
     fi
+
+    if [[ -n "$WORK_DIR" ]]; then
+        WORK_DIR="$HOME"
+    fi 
 
     # OK, we're running it
     rm -f $STATUS_FILE
@@ -335,5 +367,25 @@ then
         waitjob
         # waitjob $jobid
         # reportback
+    fi
+fi
+
+if [ "$environment" = "node" ]
+then
+    module load singularity/latest
+    if [[ -n "$KILL_JOB" ]]; 
+    then
+        killjob 
+        exit
+    fi
+    if [[ -n "$CHECK_JOB" ]]; 
+    then
+        checkstatus
+        exit
+    fi
+    if [[ -n "$TOKEN_CHECK" ]]; 
+    then
+        gettoken 
+        exit
     fi
 fi
