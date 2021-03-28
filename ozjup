@@ -355,7 +355,7 @@ then
         exit
     fi
 
-    if [[ -n "$WORK_DIR" ]]; then
+    if [[ -z "$WORK_DIR" ]]; then
         WORK_DIR="$HOME"
     fi 
 
