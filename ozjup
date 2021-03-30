@@ -12,10 +12,11 @@ SCRIPTPATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"/ozjup
 STATUS_FILE=$HOME/.jup_status
 TOKEN_FILE=$HOME/.jup_token
 JOB_FILE=$HOME/.jup_jobid
+IMAGE_NAME=ozjup.sif
 # SIF_FILE=$HOME/singularity/tensorflow2-gpu-py3-r-jupyter_latest.sif
-SIF_FILE=$HOME/singularity/ozjup.sif
-SIF_HOME=/fred/oz012/ozjup.sif
-SIF_URL=https://swift.rc.nectar.org.au/v1/AUTH_3a1bdd754ad742cba1ae637bd17e0a6a/ozjup/ozjup.sif
+SIF_FILE=$HOME/singularity/$IMAGE_NAME
+SIF_HOME=/fred/oz012/$IMAGE_NAME
+SIF_URL=https://swift.rc.nectar.org.au/v1/AUTH_3a1bdd754ad742cba1ae637bd17e0a6a/ozjup/$IMAGE_NAME
 IMAGENAME=library://ajgreen/default/tensorflow2-gpu-py3-r-jupyter:latest
 RUN_ON_NODE=
 WORK_DIR="$WORK_DIR"
@@ -35,6 +36,7 @@ start: Start notebook and connect.
 status: Check if running and if so where
 kill: Stop running instance
 token: Run jupyter notebook list to view the connection token
+tunnel: Start ssh tunnel to existing session
 help: Print this help and exit
 
 With optional flags:
@@ -73,8 +75,7 @@ killjob() {
     else
         jobhost=$(cat $STATUS_FILE)
         if [[ "$(hostname)" != "$jobhost" ]]; then
-            # ssh $jobhost "bash ozjup -k"
-            ssh ${jobhost} -q -t "exec bash -l ozjup -k"
+            ssh ${jobhost} -q -t "exec bash -l ozjup kill"
         else
             running=isrunning
             if [[ "0" != running ]]; then
@@ -106,7 +107,7 @@ isrunningold() {
 runjup() {
     checksif
     workdir=$1
-    singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$workdir":/work $HOME/singularity/ozjup.sif ozjup
+    singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$workdir":/work $HOME/singularity/$IMAGE_NAME ozjup
     echo $(hostname) > $STATUS_FILE
 }
 
@@ -155,7 +156,7 @@ checksif() {
         mkdir -p $HOME/singularity
         cd $HOME/singularity
         if [[ -e "$SIF_HOME" ]]; then
-            ln -s $SIF_HOME ozjup.sif
+            ln -s $SIF_HOME $IMAGE_NAME
         else
             wget --quiet $SIF_URL
         fi
@@ -185,7 +186,7 @@ module load singularity/latest
 cd $HOME"'
 echo $(hostname) > '"$STATUS_FILE
 
-singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$WORK_DIR":/work $HOME/singularity/ozjup.sif ozjup
+singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$WORK_DIR":/work $HOME/singularity/$IMAGE_NAME ozjup
 
 
 jobup=1"'
@@ -213,6 +214,10 @@ do
         ;;
         start)
         START_JOB=1
+        shift
+        ;;
+        tunnel)
+        TUNNEL_ONLY=1
         shift
         ;;
         kill)
@@ -253,6 +258,10 @@ do
         WORK_DIR="$2"
         shift
         # shift
+        ;;
+        -i|--image)
+        IMAGE_NAME="$2"
+        shift
         ;;
         -m|--memory)
         MEM="$2"
@@ -302,7 +311,7 @@ ozu=${USERNAME}$oz
 
 if [ "$environment" = "home" ]
 then
-    if [[ -z "${TOKEN_CHECK}${START_JOB}${KILL_JOB}${CHECK_JOB}" ]]; then
+    if [[ -z "${TOKEN_CHECK}${START_JOB}${KILL_JOB}${CHECK_JOB}${TUNNEL_ONLY}" ]]; then
         printhelp
         exit
     fi
@@ -317,11 +326,20 @@ then
         fi
         exit
     fi
+    if [[ -n "$TUNNEL_ONLY" ]]; then
+        status=$(checkstatus)
+        if [[ -n "$status" ]]; then
+            sshtunnel $status
+        else
+            echo "No notebook running."
+        fi
+        exit
+    fi
 
     # Re-execute the script, but on ozstar.
     ssh ${ozu} -q -t "exec bash -l ozjup $allargs"
 
-    if [[ -n "$KILL_JOB$TOKEN_CHECK" ]]; then
+    if [[ -n "$KILL_JOB$TOKEN_CHECK$TUNNEL_ONLY" ]]; then
         exit
     fi
 
