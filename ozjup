@@ -45,6 +45,7 @@ With optional flags:
 -m, --memory: Memory required in GB (with -n only)
 -h, --hours: Hours in walltime to request (with -n only)
 -ng, --no-gpu: Don't ask for a GPU (with -n only)
+-i, --image: Use a custom image (e.g. ozjup_for_me.sif)
 
 ## Examples
 ./ozjup -u username start # run jupyter on head node and start SSH tunnel.
