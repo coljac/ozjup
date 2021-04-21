@@ -41,6 +41,7 @@ help: Print this help and exit
 
 With optional flags:
 -u, --user: OzSTAR username (If left out, will work it out automatically, can be set with OZSTAR_USERNAME environment variable.)
+-w, --workdir: The notebook root, i.e. the root directory where data/  notebooks are stored; a path on OzSTAR. Default = home dir.
 -n, --node: Run on a dedicated node using a slurm job
 -m, --memory: Memory required in GB (with -n only)
 -h, --hours: Hours in walltime to request (with -n only)
@@ -255,7 +256,7 @@ do
         shift
         # shift
         ;;
-        -w|--work)
+        -w|--workdir)
         WORK_DIR="$2"
         shift
         # shift
