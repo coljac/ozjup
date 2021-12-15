@@ -188,6 +188,8 @@ module load singularity/latest
 cd $HOME"'
 echo $(hostname) > '"$STATUS_FILE
 
+SINGULARITY_TMPDIR=/tmp
+
 singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$WORK_DIR":/work $HOME/singularity/$IMAGE_NAME ozjup
 
 
