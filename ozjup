@@ -14,7 +14,6 @@ TOKEN_FILE=$HOME/.jup_token
 JOB_FILE=$HOME/.jup_jobid
 IMAGE_NAME=ozjup.sif
 # SIF_FILE=$HOME/singularity/tensorflow2-gpu-py3-r-jupyter_latest.sif
-SIF_FILE=$HOME/singularity/$IMAGE_NAME
 SIF_HOME=/fred/oz012/$IMAGE_NAME
 SIF_URL=https://swift.rc.nectar.org.au/v1/AUTH_3a1bdd754ad742cba1ae637bd17e0a6a/ozjup/$IMAGE_NAME
 IMAGENAME=library://ajgreen/default/tensorflow2-gpu-py3-r-jupyter:latest
@@ -22,6 +21,7 @@ RUN_ON_NODE=
 WORK_DIR="$WORK_DIR"
 USERNAME="$OZSTAR_USERNAME"
 PORT=9999
+DPORT=9999
 MEM=10
 HOURS=4
 GPU=yes
@@ -109,7 +109,7 @@ isrunningold() {
 runjup() {
     checksif
     workdir=$1
-    singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$workdir":/work $HOME/singularity/$IMAGE_NAME ozjup
+    singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$workdir":/work $SIF_FILE ozjup
     echo $(hostname) > $STATUS_FILE
 }
 
@@ -146,7 +146,8 @@ sshtunnel() {
     # echo "Now connect to http://localhost:$PORT"
     token=$(ssh ${ozu} "exec bash -l ozjup token")
     echo $token
-    ssh -o "StrictHostKeyChecking no" -N -L  $PORT:localhost:$PORT -J ${ozu} ${USERNAME}@${NODENAME} 
+    # echo COMMAND: ssh -o "StrictHostKeyChecking no" -N -L  $PORT:localhost:$DPORT -J ${ozu} ${USERNAME}@${NODENAME} 
+    ssh -o "StrictHostKeyChecking no" -N -L  $PORT:localhost:$DPORT -J ${ozu} ${USERNAME}@${NODENAME} 
     # echo $OPENCMD http://localhost:${PORT}/ &
     # fg
 }
@@ -182,15 +183,14 @@ makebatch() {
 #SBATCH --cpus-per-task=1
 #SBATCH --time=${HOURS}:00:00
 #SBATCH --mem=${MEM}G
-#SBATCH --tmp=7G
+#SBATCH --tmp=24G
 $gpuline
 
 module load singularity/latest
-cd $HOME"'
-echo $(hostname) > '"$STATUS_FILE
+cd $HOME
 
-singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$WORK_DIR":/work $HOME/singularity/$IMAGE_NAME ozjup
-
+singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$WORK_DIR":/work $SIF_FILE ozjup
+"'echo $(hostname) > '"$STATUS_FILE
 
 jobup=1"'
 while [[ "1" == "$jobup" ]]; do
@@ -199,9 +199,10 @@ while [[ "1" == "$jobup" ]]; do
     if [[ -z "$running" ]]; then
         jobup=0
     fi
-done
+done'"
+rm $STATUS_FILE
 
-' > $HOME/runjup.sh 
+" > $HOME/runjup.sh 
     jobid=$(sbatch $HOME/runjup.sh|awk '{print $4'})
     echo $jobid > $JOB_FILE
 }
@@ -257,6 +258,10 @@ do
         shift
         # shift
         ;;
+        -t|--tmpdir)
+        SINGULARITY_TMPDIR=="$2"
+        shift
+        ;;
         -w|--workdir)
         WORK_DIR="$2"
         shift
@@ -284,10 +289,6 @@ do
 done
 # echo "Running script with these args:" $allargs
 
-
-
-
-
 environment=home
 
 if [ "1" -eq $(grep -i centos /etc/redhat-release 2>/dev/null |wc -l) ]
@@ -311,6 +312,12 @@ fi
 
 ozu=${USERNAME}$oz
 # echo Running on $(hostname) as user $USERNAME Node=$RUN_ON_NODE env=$environment workdir=${WORK_DIR}
+
+# if [[ ! -e "$IMAGE_NAME" ]]; then
+    # SIF_FILE="$IMAGE_NAME"
+# else
+    SIF_FILE="$HOME/singularity/$IMAGE_NAME"
+# fi
 
 if [ "$environment" = "home" ]
 then
