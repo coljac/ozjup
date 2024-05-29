@@ -320,7 +320,7 @@ ozu=${USERNAME}$oz
 # if [[ ! -e "$IMAGE_NAME" ]]; then
     # SIF_FILE="$IMAGE_NAME"
 # else
-    SIF_FILE="$HOME/singularity/$IMAGE_NAME"
+    SIF_FILE="$HOME/apptainer/$IMAGE_NAME"
 # fi
 
 if [ "$environment" = "home" ]
