@@ -188,10 +188,10 @@ makebatch() {
 #SBATCH --tmp=24G
 $gpuline
 
-module load apptainer/latest
+module load apptainer
 cd $HOME
 
-apptainer instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$WORK_DIR":/work $SIF_FILE ozjup
+apptainer instance start --nv -B "$WORK_DIR":/work $SIF_FILE ozjup
 "'echo $(hostname) > '"$STATUS_FILE
 
 jobup=1"'
@@ -409,7 +409,7 @@ fi
 
 if [ "$environment" = "node" ]
 then
-    module load apptainer/latest
+    module load apptainer
     if [[ -n "$KILL_JOB" ]]; 
     then
         killjob 
