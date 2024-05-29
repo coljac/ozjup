@@ -1,11 +1,11 @@
 #!/bin/bash
 
 ## When run on your local machine, this script starts
-## a singularity container on ozstar running jupyter, creates an 
+## a apptainer container on ozstar running jupyter, creates an 
 ## ssh tunnel, and starts a browser to a jupyter notebook.
 
 OTHER_ARGUMENTS=()
-oz=ozstar.swin.edu.au
+oz=nt.swin.edu.au
 
 SCRIPTPATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"/ozjup
 
@@ -81,7 +81,7 @@ killjob() {
         else
             running=isrunning
             if [[ "0" != running ]]; then
-                singularity instance stop ozjup
+                apptainer instance stop ozjup
             fi
             rm $STATUS_FILE
         fi
@@ -89,7 +89,7 @@ killjob() {
 }
 
 isrunning() {
-    running=$(singularity instance list|grep ozjup)
+    running=$(apptainer instance list|grep ozjup)
     if [[ -n "$running" ]]; then
         echo 1
     else
@@ -99,8 +99,8 @@ isrunning() {
 
 
 isrunningold() {
-    if [[ -n $(ps ux | grep 'Singularity runtime') ]]; then
-        ps ux | grep 'Singularity runtime' | awk '{print $2}'
+    if [[ -n $(ps ux | grep 'apptainer runtime') ]]; then
+        ps ux | grep 'apptainer runtime' | awk '{print $2}'
     else
         echo 0
     fi
@@ -109,7 +109,8 @@ isrunningold() {
 runjup() {
     checksif
     workdir=$1
-    singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$workdir":/work $SIF_FILE ozjup
+    # apptainer instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$workdir":/work $SIF_FILE ozjup
+    apptainer instance start --nv -B "$workdir":/work $SIF_FILE ozjup
     echo $(hostname) > $STATUS_FILE
 }
 
@@ -127,12 +128,12 @@ checkstatus() {
 }
 
 gettoken() {
-    tokcommand="singularity exec instance://ozjup jupyter notebook list"
+    tokcommand="apptainer exec instance://ozjup jupyter notebook list"
     jobhost=$(cat $STATUS_FILE)
     if [[ "$(hostname)" != "$jobhost" ]]; then
         result=$(ssh ${jobhost} -q -t "exec bash -l ozjup token")
     else
-        result=$(singularity exec instance://ozjup jupyter notebook list|grep localhost)
+        result=$( $tokcommand | grep http | sed -E 's#http://[^:]+:#http://localhost:#')
     fi
     echo $result
 }
@@ -146,8 +147,8 @@ sshtunnel() {
     # echo "Now connect to http://localhost:$PORT"
     token=$(ssh ${ozu} "exec bash -l ozjup token")
     echo $token
-    # echo COMMAND: ssh -o "StrictHostKeyChecking no" -N -L  $PORT:localhost:$DPORT -J ${ozu} ${USERNAME}@${NODENAME} 
-    ssh -o "StrictHostKeyChecking no" -N -L  $PORT:localhost:$DPORT -J ${ozu} ${USERNAME}@${NODENAME} 
+    # echo COMMAND: ssh -o "StrictHostKeyChecking no" -N -L  $PORT:localhost:$DPORT -J ${ozu} ${USERNAME}${NODENAME} 
+    ssh -o "StrictHostKeyChecking no" -N -L  $PORT:localhost:$DPORT -J ${ozu} ${USERNAME}${NODENAME} 
     # echo $OPENCMD http://localhost:${PORT}/ &
     # fg
 }
@@ -156,14 +157,14 @@ checksif() {
     if [ ! -e $SIF_FILE ]
     then
         echo "Fetching image: this will happen only once"
-        mkdir -p $HOME/singularity
-        cd $HOME/singularity
+        mkdir -p $HOME/apptainer
+        cd $HOME/apptainer
         if [[ -e "$SIF_HOME" ]]; then
             ln -s $SIF_HOME $IMAGE_NAME
         else
             wget --quiet $SIF_URL
         fi
-        # singularity pull $IMAGENAME
+        # apptainer pull $IMAGENAME
     # else
         # echo "Image present."
     fi
@@ -186,16 +187,16 @@ makebatch() {
 #SBATCH --tmp=24G
 $gpuline
 
-module load singularity/latest
+module load apptainer/latest
 cd $HOME
 
-singularity instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$WORK_DIR":/work $SIF_FILE ozjup
+apptainer instance start --nv -B /apps/skylake/software/CUDA/10.1.243/lib64:/usr/local/cuda/lib64 -B "$WORK_DIR":/work $SIF_FILE ozjup
 "'echo $(hostname) > '"$STATUS_FILE
 
 jobup=1"'
 while [[ "1" == "$jobup" ]]; do
     sleep 10
-    running=$(singularity instance list|grep ozjup)
+    running=$(apptainer instance list|grep ozjup)
     if [[ -z "$running" ]]; then
         jobup=0
     fi
@@ -259,7 +260,7 @@ do
         # shift
         ;;
         -t|--tmpdir)
-        SINGULARITY_TMPDIR=="$2"
+        apptainer_TMPDIR="$2"
         shift
         ;;
         -w|--workdir)
@@ -291,9 +292,9 @@ done
 
 environment=home
 
-if [ "1" -eq $(grep -i centos /etc/redhat-release 2>/dev/null |wc -l) ]
+if [ "1" -eq $(grep -i "Rocky Linux" /etc/redhat-release 2>/dev/null |wc -l) ]
 then
-    if [ -n "$(hostname | grep farnarkle)" ]
+    if [ -n "$(hostname | grep tooarrana)" ]
     then
         environment=head
     else
@@ -311,7 +312,9 @@ else
 fi
 
 ozu=${USERNAME}$oz
-# echo Running on $(hostname) as user $USERNAME Node=$RUN_ON_NODE env=$environment workdir=${WORK_DIR}
+
+
+# echo XX Running on $(hostname) as user $USERNAME Node=$RUN_ON_NODE env=$environment workdir=${WORK_DIR}
 
 # if [[ ! -e "$IMAGE_NAME" ]]; then
     # SIF_FILE="$IMAGE_NAME"
@@ -366,7 +369,7 @@ fi
 
 if [ "$environment" = "head" ]
 then
-    module load singularity/latest
+    module load apptainer
     if [[ -n "$KILL_JOB" ]]; 
     then
         killjob 
@@ -405,7 +408,7 @@ fi
 
 if [ "$environment" = "node" ]
 then
-    module load singularity/latest
+    module load apptainer/latest
     if [[ -n "$KILL_JOB" ]]; 
     then
         killjob 
